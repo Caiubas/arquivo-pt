@@ -50,7 +50,8 @@ class Interface:
 
 if __name__ == '__main__':
     interface = Interface()
-    request = Request(query='floresta')
+    request = Request(query='SNS')
+    print("inicio do request")
     json = interface.text_request(request)
     print(json)
     for item in json["response_items"]:

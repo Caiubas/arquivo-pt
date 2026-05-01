@@ -1,0 +1,535 @@
+{
+  "metadata": {
+    "total_documentos": 32,
+    "k_clusters": 6,
+    "silhouette_scores": {
+      "6": 0.1976
+    },
+    "silhouette_otimo": 0.1976,
+    "gerado_em": "2026-04-24T01:11:20.874773+00:00"
+  },
+  "clusters": {
+    "0": {
+      "rotulo": "Voluntariado · Advancecare · Segurança",
+      "n_documentos": 9,
+      "top_termos": [
+        "voluntariado",
+        "advancecare",
+        "segurança",
+        "produtos",
+        "serviços",
+        "soluções",
+        "trabalho",
+        "concelho",
+        "internacional",
+        "análise"
+      ],
+      "exemplos_titulos": [
+        "Notícias sobre SNS",
+        "SNS24 | Centro de Contacto do Serviço Nacional de Saúde",
+        "Início"
+      ],
+      "ids_documentos": [
+        1,
+        2,
+        3,
+        11,
+        13,
+        17,
+        18,
+        20,
+        25
+      ]
+    },
+    "1": {
+      "rotulo": "Hosp · Triagem · Triagem Manchester",
+      "n_documentos": 10,
+      "top_termos": [
+        "hosp",
+        "triagem",
+        "triagem manchester",
+        "manchester",
+        "estação",
+        "úteis",
+        "manchester triagem",
+        "emergência",
+        "prioridades",
+        "cro"
+      ],
+      "exemplos_titulos": [
+        "Centro Hospitalar de Lisboa Central, EPE",
+        "CHCOIMBRA > Triagem Manchester > Triagem de Manchester",
+        "HSC > Triagem de Manchester > Triagem de Manchester"
+      ],
+      "ids_documentos": [
+        10,
+        22,
+        23,
+        24,
+        26,
+        27,
+        28,
+        29,
+        30,
+        31
+      ]
+    },
+    "2": {
+      "rotulo": "Nails · Unhas · Tratamento",
+      "n_documentos": 1,
+      "top_termos": [
+        "nails",
+        "unhas",
+        "tratamento",
+        "cores",
+        "footlogix",
+        "saiba",
+        "encontrar",
+        "salon",
+        "mundial",
+        "anos"
+      ],
+      "exemplos_titulos": [
+        "SNS Nails"
+      ],
+      "ids_documentos": [
+        0
+      ]
+    },
+    "3": {
+      "rotulo": "Nestlé · Cães · Gato",
+      "n_documentos": 3,
+      "top_termos": [
+        "nestlé",
+        "cães",
+        "gato",
+        "republic",
+        "africa",
+        "english",
+        "the",
+        "united",
+        "china",
+        "belgium"
+      ],
+      "exemplos_titulos": [
+        "Nestlé Portugal",
+        "Portugal | Zoetis PT",
+        "Página inicial da HillsPet.com.pt"
+      ],
+      "ids_documentos": [
+        12,
+        14,
+        15
+      ]
+    },
+    "4": {
+      "rotulo": "Prestadores · Recursos · Gestão",
+      "n_documentos": 3,
+      "top_termos": [
+        "prestadores",
+        "recursos",
+        "gestão",
+        "cuidados",
+        "contratualização",
+        "carreira",
+        "rede prestadores",
+        "transparência",
+        "gestão recursos",
+        "acss"
+      ],
+      "exemplos_titulos": [
+        "ACSS - Página Inicial",
+        "SNS – Portal do SNS",
+        "Saúde + – SNS"
+      ],
+      "ids_documentos": [
+        16,
+        19,
+        21
+      ]
+    },
+    "5": {
+      "rotulo": "Psiquiatria · Centro · Hospitalar",
+      "n_documentos": 6,
+      "top_termos": [
+        "psiquiatria",
+        "centro",
+        "hospitalar",
+        "centro hospitalar",
+        "chts",
+        "gabinete",
+        "dia",
+        "comissão",
+        "utentes",
+        "hospitalar tâmega"
+      ],
+      "exemplos_titulos": [
+        "Centro Hospitalar de Leiria",
+        "CHTS - Início",
+        "Centro Hospitalar São João"
+      ],
+      "ids_documentos": [
+        4,
+        5,
+        6,
+        7,
+        8,
+        9
+      ]
+    }
+  },
+  "documentos": [
+    {
+      "id": 0,
+      "titulo": "SNS Nails",
+      "data": "2018-10-13T09:57:22",
+      "categoria": "SNS",
+      "url": "http://snsnailssalon.pt/snsnails.html",
+      "cluster_id": 2,
+      "cluster_rotulo": "Nails · Unhas · Tratamento",
+      "umap_x": 2.0130999088287354,
+      "umap_y": 2.9193999767303467
+    },
+    {
+      "id": 1,
+      "titulo": "Notícias sobre SNS",
+      "data": "2012-01-21T19:55:26",
+      "categoria": "SNS",
+      "url": "http://topicos.jornaldenegocios.pt/SNS",
+      "cluster_id": 0,
+      "cluster_rotulo": "Voluntariado · Advancecare · Segurança",
+      "umap_x": 3.4065001010894775,
+      "umap_y": 3.296600103378296
+    },
+    {
+      "id": 2,
+      "titulo": "SNS24 | Centro de Contacto do Serviço Nacional de Saúde",
+      "data": "2019-03-24T21:20:06",
+      "categoria": "SNS",
+      "url": "https://www.sns24.gov.pt/",
+      "cluster_id": 0,
+      "cluster_rotulo": "Voluntariado · Advancecare · Segurança",
+      "umap_x": 2.5445001125335693,
+      "umap_y": 3.0325000286102295
+    },
+    {
+      "id": 3,
+      "titulo": "Início",
+      "data": "2020-06-28T07:49:43",
+      "categoria": "urgência hospitalar",
+      "url": "http://www.chlo.min-saude.pt/",
+      "cluster_id": 0,
+      "cluster_rotulo": "Voluntariado · Advancecare · Segurança",
+      "umap_x": 3.2869999408721924,
+      "umap_y": 2.3987998962402344
+    },
+    {
+      "id": 4,
+      "titulo": "Centro Hospitalar de Leiria",
+      "data": "2018-10-31T17:27:09",
+      "categoria": "urgência hospitalar",
+      "url": "http://www.chleiria.pt/",
+      "cluster_id": 5,
+      "cluster_rotulo": "Psiquiatria · Centro · Hospitalar",
+      "umap_x": 5.000500202178955,
+      "umap_y": 2.5815999507904053
+    },
+    {
+      "id": 5,
+      "titulo": "CHTS - Início",
+      "data": "2016-02-10T16:06:43",
+      "categoria": "urgência hospitalar",
+      "url": "http://www.chtamegasousa.pt/",
+      "cluster_id": 5,
+      "cluster_rotulo": "Psiquiatria · Centro · Hospitalar",
+      "umap_x": 4.137899875640869,
+      "umap_y": 2.930999994277954
+    },
+    {
+      "id": 6,
+      "titulo": "Centro Hospitalar São João",
+      "data": "2018-10-17T15:36:13",
+      "categoria": "urgência hospitalar",
+      "url": "http://portal-chsj.min-saude.pt/",
+      "cluster_id": 5,
+      "cluster_rotulo": "Psiquiatria · Centro · Hospitalar",
+      "umap_x": 4.42519998550415,
+      "umap_y": 1.9046000242233276
+    },
+    {
+      "id": 7,
+      "titulo": "Centro Hospitalar Cova da Beira - Centro Hospitalar Cova da Beira",
+      "data": "2019-09-06T14:15:25",
+      "categoria": "urgência hospitalar",
+      "url": "http://www.chcbeira.pt/",
+      "cluster_id": 5,
+      "cluster_rotulo": "Psiquiatria · Centro · Hospitalar",
+      "umap_x": 3.800100088119507,
+      "umap_y": 2.0648999214172363
+    },
+    {
+      "id": 8,
+      "titulo": "Centro Hospitalar Lisboa Norte, EPE - Site Institucional - Centro Hospitalar Lisboa Norte, EPE Site",
+      "data": "2018-10-13T20:47:46",
+      "categoria": "urgência hospitalar",
+      "url": "http://www.chln.min-saude.pt/",
+      "cluster_id": 5,
+      "cluster_rotulo": "Psiquiatria · Centro · Hospitalar",
+      "umap_x": 4.968500137329102,
+      "umap_y": 3.102400064468384
+    },
+    {
+      "id": 9,
+      "titulo": "CHMT - Centro Hospitalar Médio Tejo, E.P.E.",
+      "data": "2016-02-10T16:06:42",
+      "categoria": "urgência hospitalar",
+      "url": "http://www.chmt.min-saude.pt/",
+      "cluster_id": 5,
+      "cluster_rotulo": "Psiquiatria · Centro · Hospitalar",
+      "umap_x": 4.116799831390381,
+      "umap_y": 2.393899917602539
+    },
+    {
+      "id": 10,
+      "titulo": "Centro Hospitalar de Lisboa Central, EPE",
+      "data": "2018-04-13T08:24:35",
+      "categoria": "urgência hospitalar",
+      "url": "http://www.chlc.min-saude.pt/homepage.aspx?menuid=1",
+      "cluster_id": 1,
+      "cluster_rotulo": "Hosp · Triagem · Triagem Manchester",
+      "umap_x": 5.535799980163574,
+      "umap_y": 2.99429988861084
+    },
+    {
+      "id": 11,
+      "titulo": "Direcção-Geral da Saúde",
+      "data": "2016-02-10T17:44:28",
+      "categoria": "saúde Portugal",
+      "url": "http://www.dgs.pt/",
+      "cluster_id": 0,
+      "cluster_rotulo": "Voluntariado · Advancecare · Segurança",
+      "umap_x": 2.836199998855591,
+      "umap_y": 2.7444000244140625
+    },
+    {
+      "id": 12,
+      "titulo": "Nestlé Portugal",
+      "data": "2019-03-25T14:17:17",
+      "categoria": "saúde Portugal",
+      "url": "https://empresa.nestle.pt/",
+      "cluster_id": 3,
+      "cluster_rotulo": "Nestlé · Cães · Gato",
+      "umap_x": 5.51669979095459,
+      "umap_y": 4.501100063323975
+    },
+    {
+      "id": 13,
+      "titulo": "Vendas B2B de produtos medicina e saúde | SoloStocks Portugal",
+      "data": "2016-02-11T06:32:27",
+      "categoria": "saúde Portugal",
+      "url": "http://www.solostocks.pt/venda-produtos/medicina-saude",
+      "cluster_id": 0,
+      "cluster_rotulo": "Voluntariado · Advancecare · Segurança",
+      "umap_x": 4.304100036621094,
+      "umap_y": 4.5117998123168945
+    },
+    {
+      "id": 14,
+      "titulo": "Portugal | Zoetis PT",
+      "data": "2019-03-25T04:37:44",
+      "categoria": "saúde Portugal",
+      "url": "http://www.zoetis.com.pt/",
+      "cluster_id": 3,
+      "cluster_rotulo": "Nestlé · Cães · Gato",
+      "umap_x": 4.884300231933594,
+      "umap_y": 4.45550012588501
+    },
+    {
+      "id": 15,
+      "titulo": "Página inicial da HillsPet.com.pt",
+      "data": "2020-03-27T14:09:23",
+      "categoria": "saúde Portugal",
+      "url": "https://www.hillspet.com.pt/",
+      "cluster_id": 3,
+      "cluster_rotulo": "Nestlé · Cães · Gato",
+      "umap_x": 5.397299766540527,
+      "umap_y": 4.3383002281188965
+    },
+    {
+      "id": 16,
+      "titulo": "ACSS - Página Inicial",
+      "data": "2017-12-12T20:18:43",
+      "categoria": "saúde Portugal",
+      "url": "http://www.acss.min-saude.pt/",
+      "cluster_id": 4,
+      "cluster_rotulo": "Prestadores · Recursos · Gestão",
+      "umap_x": 2.6219000816345215,
+      "umap_y": 2.1415998935699463
+    },
+    {
+      "id": 17,
+      "titulo": "Site Voluntariado",
+      "data": "2011-05-19T20:10:15",
+      "categoria": "Serviço Nacional de Saúde",
+      "url": "http://www.voluntariado.pt/",
+      "cluster_id": 0,
+      "cluster_rotulo": "Voluntariado · Advancecare · Segurança",
+      "umap_x": 4.243500232696533,
+      "umap_y": 4.031499862670898
+    },
+    {
+      "id": 18,
+      "titulo": "Imprensa Nacional-Casa da Moeda",
+      "data": "2020-04-22T08:33:30",
+      "categoria": "Serviço Nacional de Saúde",
+      "url": "https://www.incm.pt/portal/index.jsp",
+      "cluster_id": 0,
+      "cluster_rotulo": "Voluntariado · Advancecare · Segurança",
+      "umap_x": 4.625400066375732,
+      "umap_y": 3.50819993019104
+    },
+    {
+      "id": 19,
+      "titulo": "SNS – Portal do SNS",
+      "data": "2018-11-13T03:13:00",
+      "categoria": "Serviço Nacional de Saúde",
+      "url": "https://www.sns.gov.pt/",
+      "cluster_id": 4,
+      "cluster_rotulo": "Prestadores · Recursos · Gestão",
+      "umap_x": 2.337399959564209,
+      "umap_y": 2.4052000045776367
+    },
+    {
+      "id": 20,
+      "titulo": "Preciso de médico",
+      "data": "2020-03-07T06:13:27",
+      "categoria": "Serviço Nacional de Saúde",
+      "url": "https://simulator.advancecare.pt/pt/directorio?network=Rede%20Essencial",
+      "cluster_id": 0,
+      "cluster_rotulo": "Voluntariado · Advancecare · Segurança",
+      "umap_x": 2.8733999729156494,
+      "umap_y": 1.8056999444961548
+    },
+    {
+      "id": 21,
+      "titulo": "Saúde + – SNS",
+      "data": "2019-04-20T01:34:35",
+      "categoria": "médico família SNS",
+      "url": "https://stg.sns.gov.pt/sns/saude/",
+      "cluster_id": 4,
+      "cluster_rotulo": "Prestadores · Recursos · Gestão",
+      "umap_x": 2.4391000270843506,
+      "umap_y": 2.240000009536743
+    },
+    {
+      "id": 22,
+      "titulo": "CHCOIMBRA > Triagem Manchester > Triagem de Manchester",
+      "data": "2010-06-20T19:38:08",
+      "categoria": "triagem Manchester",
+      "url": "http://www.chc.min-saude.pt/Emergencia/Triagem/Triagem.htm",
+      "cluster_id": 1,
+      "cluster_rotulo": "Hosp · Triagem · Triagem Manchester",
+      "umap_x": 6.084199905395508,
+      "umap_y": 3.1858999729156494
+    },
+    {
+      "id": 23,
+      "titulo": "HSC > Triagem de Manchester > Triagem de Manchester",
+      "data": "2005-05-30T15:26:28",
+      "categoria": "triagem Manchester",
+      "url": "http://www.hsc.pt/Emergencia/Triagem/Triagem.htm",
+      "cluster_id": 1,
+      "cluster_rotulo": "Hosp · Triagem · Triagem Manchester",
+      "umap_x": 6.3003997802734375,
+      "umap_y": 4.142399787902832
+    },
+    {
+      "id": 24,
+      "titulo": "IPOP > Triagem de Manchester > Triagem de Manchester",
+      "data": "2005-04-20T13:07:18",
+      "categoria": "triagem Manchester",
+      "url": "http://www.ipoporto.pt/Emergencia/Triagem/Triagem.htm",
+      "cluster_id": 1,
+      "cluster_rotulo": "Hosp · Triagem · Triagem Manchester",
+      "umap_x": 6.392600059509277,
+      "umap_y": 3.8631999492645264
+    },
+    {
+      "id": 25,
+      "titulo": "Triagem de Manchester",
+      "data": "2017-08-06T21:27:37",
+      "categoria": "triagem Manchester",
+      "url": "http://www.hospitaldecascais.pt/pt/servicos/Paginas/triagemmanchester.aspx",
+      "cluster_id": 0,
+      "cluster_rotulo": "Voluntariado · Advancecare · Segurança",
+      "umap_x": 3.9033000469207764,
+      "umap_y": 4.196800231933594
+    },
+    {
+      "id": 26,
+      "titulo": "CHMT > Triagem Manchester > Triagem de Manchester",
+      "data": "2010-06-12T23:18:30",
+      "categoria": "triagem Manchester",
+      "url": "http://www.chmt.min-saude.pt/Emergencia/Triagem/",
+      "cluster_id": 1,
+      "cluster_rotulo": "Hosp · Triagem · Triagem Manchester",
+      "umap_x": 6.2916998863220215,
+      "umap_y": 2.7871999740600586
+    },
+    {
+      "id": 27,
+      "titulo": "HDFF > Triagem de Manchester > Triagem de Manchester",
+      "data": "2017-02-25T16:23:30",
+      "categoria": "triagem Manchester",
+      "url": "http://www.hdfigueira.min-saude.pt/Emergencia/Triagem/Triagem.htm",
+      "cluster_id": 1,
+      "cluster_rotulo": "Hosp · Triagem · Triagem Manchester",
+      "umap_x": 6.619699954986572,
+      "umap_y": 3.2641000747680664
+    },
+    {
+      "id": 28,
+      "titulo": "IPOP > Triagem de Manchester > Triagem de Manchester",
+      "data": "2005-06-21T14:12:15",
+      "categoria": "triagem Manchester",
+      "url": "http://www.ipoporto.pt/Emergencia/Triagem/",
+      "cluster_id": 1,
+      "cluster_rotulo": "Hosp · Triagem · Triagem Manchester",
+      "umap_x": 6.680799961090088,
+      "umap_y": 4.403200149536133
+    },
+    {
+      "id": 29,
+      "titulo": "HSC > Triagem de Manchester > Triagem de Manchester",
+      "data": "2005-04-05T20:07:21",
+      "categoria": "triagem Manchester",
+      "url": "http://www.hsc.pt/Emergencia/Triagem/",
+      "cluster_id": 1,
+      "cluster_rotulo": "Hosp · Triagem · Triagem Manchester",
+      "umap_x": 6.860599994659424,
+      "umap_y": 3.8652000427246094
+    },
+    {
+      "id": 30,
+      "titulo": "HEM > Triagem de Manchester > Triagem de Manchester",
+      "data": "2015-09-13T02:23:05",
+      "categoria": "triagem Manchester",
+      "url": "http://www.hegasmoniz.min-saude.pt/Emergencia/Triagem/Triagem.htm",
+      "cluster_id": 1,
+      "cluster_rotulo": "Hosp · Triagem · Triagem Manchester",
+      "umap_x": 5.783299922943115,
+      "umap_y": 3.626300096511841
+    },
+    {
+      "id": 31,
+      "titulo": "HDS > Triagem de Manchester > Triagem de Manchester",
+      "data": "2005-07-21T23:28:04",
+      "categoria": "triagem Manchester",
+      "url": "http://www.hds.min-saude.pt/Emergencia/Triagem/Triagem.htm",
+      "cluster_id": 1,
+      "cluster_rotulo": "Hosp · Triagem · Triagem Manchester",
+      "umap_x": 7.192200183868408,
+      "umap_y": 3.5820000171661377
+    }
+  ]
+}
