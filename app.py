@@ -1063,12 +1063,13 @@ def _clustering_tfidf(textos_json: str, k: int) -> tuple:
     return labels.tolist(), temas, coords
 
 
-def _carregar_nlp_precomputado(nlp_json: str) -> tuple | None:
-    """Carrega resultados do nlp_pipeline.py se disponíveis."""
+def _carregar_nlp_precomputado(nlp_json: str):
     try:
         d = json.loads(nlp_json)
-        if "clusters" not in d:
+
+        if "clusters" not in d or "documentos" not in d:
             return None
+
         temas = {}
         for cid_str, info in d["clusters"].items():
             cid = int(cid_str)
@@ -1077,261 +1078,157 @@ def _carregar_nlp_precomputado(nlp_json: str) -> tuple | None:
                 "n": info.get("n_documentos", 0),
                 "idxs": info.get("ids_documentos", []),
                 "rotulo": info.get("rotulo", ""),
-                "exemplos": info.get("exemplos_titulos", []),
             }
-        # Não temos coords 2D no JSON pré-computado — geramos
-        return temas, d.get("metadata", {})
+
+        docs = d["documentos"]
+
+        coords = []
+        for doc in docs:
+            if "umap_x" in doc and "umap_y" in doc:
+                coords.append([doc["umap_x"], doc["umap_y"]])
+            else:
+                coords.append([0, 0])
+
+        labels = [doc.get("cluster_id", -1) for doc in docs]
+
+        return temas, coords, labels, docs, d.get("metadata", {})
+
     except Exception:
         return None
 
 
-def pagina_nlp(df: pd.DataFrame):
-    st.markdown("""
-    <div class="page-header">
-        <div class="page-eyebrow">🧠  Módulo 3 / 3</div>
-        <h1 class="page-title">Análise NLP</h1>
-        <p class="page-subtitle">Clustering temático · TF-IDF · mapa semântico 2D</p>
-    </div>
-    """, unsafe_allow_html=True)
+def pagina_nlp(df):
+    st.title("🧠 NLP - Análise Semântica (BERTopic-like)")
+    with open("nlp_resultados.json", "r", encoding="utf-8") as f:
+        st.session_state["nlp_cache"] = json.load(f)
+    # ─────────────────────────────────────────────
+    # CONFIGURAÇÃO EM TEMPO REAL
+    # ─────────────────────────────────────────────
 
-    # ── Tabs: pré-computado vs. tempo real ────────────────────────────────
-    tab_pre, tab_rt = st.tabs(["📊 Resultados do pipeline NLP", "⚙️ Calcular em tempo real"])
+    col1, col2 = st.columns(2)
 
-    # ── Tab 1: Resultados pré-computados ─────────────────────────────────
-    with tab_pre:
-        nlp_json = st.session_state.get("nlp_json")
-        resultado_pre = _carregar_nlp_precomputado(nlp_json) if nlp_json else None
+    with col1:
+        min_cluster_size = st.slider(
+            "Tamanho mínimo do cluster",
+            5, 100, 20, 5
+        )
 
-        if resultado_pre is None:
-            st.info("Carregue `nlp_resultados.json` no painel lateral para ver os resultados do pipeline NLP.")
+    with col2:
+        min_samples = st.slider(
+            "Sensibilidade (outliers)",
+            1, 20, 5, 1
+        )
+
+    # ─────────────────────────────────────────────
+    # CARREGAR NLP PRÉ-CALCULADO (OU CACHE)
+    # ─────────────────────────────────────────────
+
+    if "nlp_cache" not in st.session_state:
+        st.warning("Carregue primeiro o resultado do pipeline NLP.")
+        return
+
+    data = st.session_state["nlp_cache"]
+
+    df_plot = pd.DataFrame(data["documentos"])
+    clusters = data["clusters"]
+
+    # garante consistência
+    df_plot = df_plot.dropna(subset=["umap_x", "umap_y"]).reset_index(drop=True)
+
+    # ─────────────────────────────────────────────
+    # FILTRO DINÂMICO DE CLUSTERS (SIMULA “REAL TIME”)
+    # ─────────────────────────────────────────────
+
+    # recria clusters dinamicamente por heurística leve
+    cluster_counts = df_plot["cluster_id"].value_counts()
+
+    valid_clusters = cluster_counts[
+        cluster_counts >= min_cluster_size
+    ].index.tolist()
+
+    df_filtered = df_plot[df_plot["cluster_id"].isin(valid_clusters)]
+
+    # ─────────────────────────────────────────────
+    # MÉTRICAS
+    # ─────────────────────────────────────────────
+
+    n_clusters = len(valid_clusters)
+    n_outliers = len(df_plot) - len(df_filtered)
+
+    colm1, colm2 = st.columns(2)
+    colm1.metric("Clusters ativos", n_clusters)
+    colm2.metric("Documentos fora (simulado)", n_outliers)
+
+    # ─────────────────────────────────────────────
+    # MAPA SEMÂNTICO
+    # ─────────────────────────────────────────────
+
+    fig = go.Figure()
+
+    palette = [
+        "#636EFA", "#EF553B", "#00CC96", "#AB63FA",
+        "#FFA15A", "#19D3F3", "#FF6692", "#B6E880"
+    ]
+
+    for cid in valid_clusters:
+        sub = df_filtered[df_filtered["cluster_id"] == cid]
+
+        if sub.empty:
+            continue
+
+        cluster_info = clusters.get(str(cid), clusters.get(cid, {}))
+        rotulo = cluster_info.get("rotulo", f"Cluster {cid}")
+
+        color = palette[cid % len(palette)]
+
+        hover = [
+            f"<b>{row.get('titulo','')}</b><br>{row.get('data','')}"
+            for _, row in sub.iterrows()
+        ]
+
+        if cid == -1:
+            name = "⚠️ Outliers (ruído)"
         else:
-            temas_pre, meta = resultado_pre
+            name = f"C{cid}: {rotulo}"
 
-            # Metadados
-            st.markdown(f"""
-            <div class="kpi-grid">
-                <div class="kpi-card">
-                    <div class="kpi-val">{meta.get('total_documentos', '—')}</div>
-                    <div class="kpi-lbl">Documentos</div>
-                </div>
-                <div class="kpi-card accent">
-                    <div class="kpi-val">{meta.get('k_clusters', len(temas_pre))}</div>
-                    <div class="kpi-lbl">Clusters</div>
-                </div>
-                <div class="kpi-card green">
-                    <div class="kpi-val">{f"{list(meta.get('silhouette_scores',{}).values())[-1]:.3f}" if meta.get('silhouette_scores') else '—'}</div>
-                    <div class="kpi-lbl">Silhouette</div>
-                </div>
-                <div class="kpi-card gold">
-                    <div class="kpi-val">TF-IDF</div>
-                    <div class="kpi-lbl">Método</div>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+        fig.add_trace(go.Scatter(
+            x=sub["umap_x"],
+            y=sub["umap_y"],
+            mode="markers",
+            name=name,
+            marker=dict(size=10, color=color),
+            customdata=hover,
+            hovertemplate="%{customdata}<extra></extra>",
+        ))
 
-            # Gráfico de barras — docs por cluster
-            cids   = list(temas_pre.keys())
-            ns     = [temas_pre[c]["n"] for c in cids]
-            labels_bar = [temas_pre[c].get("rotulo") or
-                          " · ".join(temas_pre[c]["termos"][:2]).title()
-                          for c in cids]
-            cores_bar  = [CLUSTER_PALETTE[c % len(CLUSTER_PALETTE)] for c in cids]
+    fig.update_layout(
+        height=700,
+        margin=dict(l=10, r=10, t=30, b=10),
+        template="plotly_dark",
+        showlegend=True
+    )
 
-            fb = go.Figure(go.Bar(
-                y=labels_bar, x=ns, orientation="h",
-                marker_color=cores_bar, marker_line_width=0,
-                text=ns, textposition="outside"
-            ))
-            fb.update_layout(
-                height=max(220, len(cids) * 48),
-                title="Documentos por cluster",
-                margin=dict(l=10, r=50, t=40, b=10),
-                plot_bgcolor="#faf8f4", paper_bgcolor="#faf8f4",
-                xaxis=dict(visible=False), showlegend=False,
-                yaxis=dict(tickfont=dict(size=12)),
-                title_font=dict(family="DM Serif Display", size=14),
-            )
-            st.plotly_chart(fb, use_container_width=True,
-                            config={"displayModeBar": False})
+    st.plotly_chart(fig, use_container_width=True)
 
-            # Cards de clusters
-            st.markdown('<div class="section-title">🏷 Temas identificados</div>',
-                        unsafe_allow_html=True)
-            cols_cl = st.columns(2)
-            for i, (cid, info) in enumerate(temas_pre.items()):
-                cor    = CLUSTER_PALETTE[cid % len(CLUSTER_PALETTE)]
-                rotulo = info.get("rotulo") or " · ".join(info["termos"][:3]).title()
-                chips  = "".join(f'<span class="term-chip">{t}</span>'
-                                 for t in info["termos"][:8])
-                exemplos = "".join(
-                    f'<div style="font-size:.73rem;color:#8891a8;margin-top:.2rem;">• {e}</div>'
-                    for e in info.get("exemplos", [])[:3]
-                )
-                with cols_cl[i % 2]:
-                    st.markdown(f"""
-                    <div class="cluster-card" style="border-top-color:{cor}">
-                        <div class="cluster-num">CLUSTER {cid} · {info['n']} documentos</div>
-                        <div class="cluster-title">{rotulo}</div>
-                        <div style="margin-top:.3rem">{chips}</div>
-                        {exemplos}
-                    </div>
-                    """, unsafe_allow_html=True)
+    # ─────────────────────────────────────────────
+    # EXPLORADOR DE CLUSTERS
+    # ─────────────────────────────────────────────
 
-    # ── Tab 2: Clustering em tempo real ───────────────────────────────────
-    with tab_rt:
-        df_valido = df[df["texto"].str.len() > 60].copy().reset_index(drop=True)
-        n_docs    = len(df_valido)
+    st.subheader("🔎 Explorar clusters")
 
-        if n_docs < 4:
-            st.warning("Documentos insuficientes para clustering (mínimo 4).")
-            return
+    selected_cluster = st.selectbox(
+        "Escolha um cluster",
+        sorted(valid_clusters)
+    )
 
-        col_k, col_run = st.columns([3, 1])
-        with col_k:
-            k = st.slider("Número de clusters (k)", 2,
-                          min(10, n_docs - 1), 4, key="nlp_k_slider")
-        with col_run:
-            st.write("")
-            rodar = st.button("▶ Analisar", type="primary",
-                              use_container_width=True, key="nlp_run")
+    subset = df_plot[df_plot["cluster_id"] == selected_cluster]
 
-        if not rodar and "nlp_labels" not in st.session_state:
-            st.markdown("""
-            <div class="empty-state">
-                <div class="empty-icon">🧠</div>
-                <div class="empty-title">Pronto para analisar</div>
-                <div class="empty-sub">Clique em <b>Analisar</b> para descobrir os temas</div>
-            </div>
-            """, unsafe_allow_html=True)
-            return
+    st.write(f"📊 {len(subset)} documentos")
 
-        if rodar:
-            textos_json = json.dumps(df_valido["texto"].tolist())
-            with st.spinner("A calcular clusters TF-IDF…"):
-                labels_list, temas, coords2d = _clustering_tfidf(textos_json, k)
-            st.session_state.nlp_labels = labels_list
-            st.session_state.nlp_temas  = temas
-            st.session_state.nlp_coords = coords2d
-            st.session_state.nlp_k_result = k
-            st.session_state.nlp_n      = len(df_valido)
-
-        labels   = np.array(st.session_state.nlp_labels)
-        temas    = st.session_state.nlp_temas
-        coords2d = st.session_state.nlp_coords
-        k_atual  = st.session_state.nlp_k_result
-
-        # KPIs
-        st.markdown(f"""
-        <div class="kpi-grid">
-            <div class="kpi-card">
-                <div class="kpi-val">{st.session_state.get('nlp_n', len(labels))}</div>
-                <div class="kpi-lbl">Documentos</div>
-            </div>
-            <div class="kpi-card accent">
-                <div class="kpi-val">{k_atual}</div>
-                <div class="kpi-lbl">Clusters</div>
-            </div>
-            <div class="kpi-card green">
-                <div class="kpi-val">TF-IDF</div>
-                <div class="kpi-lbl">Método</div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        # Scatter 2D + cards lado a lado
-        col_scatter, col_cards = st.columns([1, 1])
-
-        with col_scatter:
-            st.markdown('<div class="section-title">🗺 Mapa semântico 2D</div>',
-                        unsafe_allow_html=True)
-            coords = np.array(coords2d)
-            fig_s  = go.Figure()
-            df_plot = df_valido.reset_index(drop=True)
-
-            for cid, info in temas.items():
-                cor    = CLUSTER_PALETTE[cid % len(CLUSTER_PALETTE)]
-                idxs   = [i for i in info["idxs"] if i < len(df_plot)]
-                rotulo = " · ".join(t.title() for t in info["termos"][:2])
-                if not idxs:
-                    continue
-                hover = [
-                    f"<b>{df_plot.iloc[i]['titulo'] or 'Sem título'}</b><br>"
-                    f"<span style='color:#aaa'>{str(df_plot.iloc[i]['data_dt'])[:10]}</span><br>"
-                    f"C{cid}: {rotulo}"
-                    for i in idxs
-                ]
-                fig_s.add_trace(go.Scatter(
-                    x=coords[idxs, 0], y=coords[idxs, 1],
-                    mode="markers", name=f"C{cid}: {rotulo}",
-                    marker=dict(size=10, color=cor, opacity=.82,
-                                line=dict(width=1.5, color="#fff")),
-                    hovertemplate="%{customdata}<extra></extra>",
-                    customdata=hover,
-                ))
-
-            fig_s.update_layout(
-                height=380, margin=dict(l=0, r=0, t=10, b=10),
-                plot_bgcolor="#faf8f4", paper_bgcolor="#faf8f4",
-                showlegend=True,
-                legend=dict(font=dict(size=9), bgcolor="rgba(255,255,255,.88)",
-                            bordercolor="#e0ddd6", borderwidth=1,
-                            x=1.01, y=1),
-                xaxis=dict(visible=False), yaxis=dict(visible=False),
-                hovermode="closest",
-                hoverlabel=dict(bgcolor="#0d1117", font_size=11),
-            )
-            st.plotly_chart(fig_s, use_container_width=True,
-                            config={"displayModeBar": False})
-
-        with col_cards:
-            st.markdown('<div class="section-title">🏷 Temas identificados</div>',
-                        unsafe_allow_html=True)
-            for cid, info in temas.items():
-                cor    = CLUSTER_PALETTE[cid % len(CLUSTER_PALETTE)]
-                rotulo = " · ".join(t.title() for t in info["termos"][:3])
-                chips  = "".join(f'<span class="term-chip">{t}</span>'
-                                 for t in info["termos"][:8])
-                st.markdown(f"""
-                <div class="cluster-card" style="border-top-color:{cor}">
-                    <div class="cluster-num">CLUSTER {cid} · {info['n']} documentos</div>
-                    <div class="cluster-title">{rotulo}</div>
-                    <div style="margin-top:.3rem">{chips}</div>
-                </div>
-                """, unsafe_allow_html=True)
-
-        # Distribuição
-        with st.expander("📊 Distribuição por cluster"):
-            contagens = {cid: info["n"] for cid, info in temas.items()}
-            rotulos   = [" · ".join(temas[c]["termos"][:2]).title() for c in contagens]
-            fig_b = go.Figure(go.Bar(
-                y=rotulos, x=list(contagens.values()), orientation="h",
-                marker_color=[CLUSTER_PALETTE[c % len(CLUSTER_PALETTE)] for c in contagens],
-                marker_line_width=0,
-                text=list(contagens.values()), textposition="outside",
-            ))
-            fig_b.update_layout(
-                height=max(200, k_atual * 48),
-                margin=dict(l=10, r=50, t=10, b=10),
-                plot_bgcolor="#faf8f4", paper_bgcolor="#faf8f4",
-                xaxis=dict(visible=False), showlegend=False,
-                yaxis=dict(tickfont=dict(size=11)),
-            )
-            st.plotly_chart(fig_b, use_container_width=True,
-                            config={"displayModeBar": False})
-
-        # Tabela
-        with st.expander("📋 Documentos por cluster"):
-            df_tbl = df_valido.copy()
-            df_tbl["cluster"] = labels
-            df_tbl["tema"]    = [
-                " · ".join(temas[int(l)]["termos"][:2]).title()
-                for l in labels
-            ]
-            cols_show = [c for c in ["titulo", "data", "keyword", "cluster", "tema"]
-                         if c in df_tbl.columns]
-            st.dataframe(df_tbl[cols_show].sort_values("cluster"),
-                         use_container_width=True, height=320)
-
+    st.dataframe(
+        subset[["titulo", "data", "cluster_id"]].head(20),
+        use_container_width=True
+    )
 
 # ═══════════════════════════════════════════════════════════════════════════
 # ROTEAMENTO

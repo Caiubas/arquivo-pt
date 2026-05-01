@@ -1,532 +1,289 @@
 """
-Pipeline NLP — Embeddings + Clustering para textos do SNS
-==========================================================
-Fluxo:
-  1. Carrega textos do JSON produzido pelo arquivo_pt_pipeline.py
-  2. Gera embeddings semânticos com sentence-transformers
-  3. Reduz dimensionalidade (PCA → UMAP opcional)
-  4. Determina k ótimo via Silhouette Score
-  5. Aplica KMeans e interpreta temas por TF-IDF
-  6. Exporta resultados em JSON e relatório legível
+Pipeline NLP — BERTopic-like (Embeddings + UMAP + HDBSCAN + c-TF-IDF)
+=====================================================================
 
-Instalar dependências:
-    pip install sentence-transformers scikit-learn umap-learn numpy pandas
+Melhorias:
+- Clustering com HDBSCAN (detecta k automaticamente + outliers)
+- Redução com UMAP (preserva estrutura semântica)
+- Interpretação com c-TF-IDF (melhor que TF-IDF clássico)
+- Pronto para integração com Streamlit
 
 Executar:
-    # Com ficheiro do pipeline:
-    python nlp_pipeline.py --input arquivo_sns_data.json
-
-    # Com ficheiro de eventos de exemplo:
-    python nlp_pipeline.py --input eventos_sns.json
-
-    # Ajustar número de clusters manualmente:
-    python nlp_pipeline.py --input arquivo_sns_data.json --clusters 6
+    python nlp_pipeline_bertopic.py --input arquivo_sns_data.json
 """
 
 import argparse
 import json
 import logging
 import re
-import sys
-import warnings
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from sklearn.cluster import KMeans
-from sklearn.decomposition import PCA
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics import silhouette_score
+
+from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.preprocessing import normalize
 
-warnings.filterwarnings("ignore", category=FutureWarning)
-warnings.filterwarnings("ignore", category=UserWarning)
+# externos
+import umap
+import hdbscan
 
-# ---------------------------------------------------------------------------
-# Logging
-# ---------------------------------------------------------------------------
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    datefmt="%H:%M:%S",
-)
-log = logging.getLogger(__name__)
+# ─────────────────────────────────────────────────────────────
+# CONFIG
+# ─────────────────────────────────────────────────────────────
 
-# ---------------------------------------------------------------------------
-# Constantes
-# ---------------------------------------------------------------------------
-# Modelo multilingue compacto — bom para português sem precisar de fine-tuning
-DEFAULT_MODEL    = "paraphrase-multilingual-MiniLM-L12-v2"
-MIN_TEXT_LEN     = 80       # descarta textos demasiado curtos
-MAX_TEXT_LEN     = 2_000    # trunca textos longos para economizar memória
-K_MIN, K_MAX     = 2, 10    # intervalo de k avaliado pelo Silhouette
-PCA_COMPONENTS   = 50       # dimensões após PCA (antes do KMeans)
-TOP_TERMS        = 10       # termos por cluster no relatório
-STOPWORDS_PT = {            # stopwords básicas — evita instalar nltk
+DEFAULT_MODEL = "paraphrase-multilingual-MiniLM-L12-v2"
+MIN_TEXT_LEN = 80
+MAX_TEXT_LEN = 2000
+TOP_TERMS = 10
+
+STOPWORDS_PT = {
     "de","a","o","que","e","do","da","em","um","para","com","uma","os","no",
     "se","na","por","mais","as","dos","como","mas","ao","ele","das","seu",
     "sua","ou","quando","muito","nos","já","eu","também","só","pelo","pela",
-    "até","isso","ela","entre","depois","sem","mesmo","aos","seus","quem",
-    "nas","me","esse","eles","você","essa","num","nem","suas","meu","às",
-    "minha","numa","pelos","pelas","este","fosse","dele","tu","te","vocês",
-    "vos","lhes","meus","minhas","teu","tua","teus","tuas","nosso","nossa",
-    "nossos","nossas","dela","delas","deles","lhe","este","esta","estes",
-    "estas","isto","aquele","aquela","aqueles","aquelas","aquilo","lo","la",
-    "los","las","foi","são","ser","ter","tem","há","esta","está","pelo",
-    "serviço","nacional","saúde","sns","portugal","português","portuguesa",
-    "hospital","hospitais","paciente","pacientes",
+    "até","isso","ela","entre","depois","sem","mesmo",
+    "serviço","nacional","saúde","sns","portugal"
 }
 
+logging.basicConfig(level=logging.INFO)
+log = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# 1. CARREGAMENTO E NORMALIZAÇÃO DO JSON
-# ---------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────
+# 1. LOAD
+# ─────────────────────────────────────────────────────────────
 
-def _extrair_registos(dados) -> list[dict]:
-    """Aceita lista simples ou envelope {metadata, records}."""
-    if isinstance(dados, list):
-        return dados
-    if isinstance(dados, dict):
-        if "records" in dados:
-            return dados["records"]
-        for v in dados.values():
-            if isinstance(v, list) and v:
-                return v
-    raise ValueError("Formato JSON não reconhecido. Esperado lista ou {'records': [...]}")
+def carregar_textos(path):
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
 
+    if isinstance(data, dict) and "records" in data:
+        data = data["records"]
 
-def carregar_textos(caminho: str) -> pd.DataFrame:
-    """
-    Lê o JSON e devolve DataFrame com colunas padronizadas:
-      id, texto, titulo, data, categoria, url
-    """
-    with open(caminho, encoding="utf-8") as f:
-        dados = json.load(f)
+    df = pd.DataFrame(data)
 
-    registos = _extrair_registos(dados)
-    df = pd.DataFrame(registos)
+    df = df.rename(columns={
+        "content": "texto",
+        "title": "titulo",
+        "date": "data"
+    })
 
-    # Normaliza nomes de campos entre os dois formatos (pipeline / eventos_sns.json)
-    renomear = {
-        "title":    "titulo",
-        "content":  "texto",
-        "date":     "data",
-        "keyword":  "categoria",
-        "originalURL": "url",
-    }
-    df = df.rename(columns={k: v for k, v in renomear.items() if k in df.columns})
+    if "texto" not in df:
+        raise ValueError("Campo 'texto' não encontrado")
 
-    # Campo de texto principal: "texto" > "descricao" > "snippet"
-    if "texto" not in df.columns:
-        for fallback in ("descricao", "snippet"):
-            if fallback in df.columns:
-                df["texto"] = df[fallback]
-                break
-
-    if "texto" not in df.columns:
-        raise ValueError("Nenhum campo de texto encontrado (esperado: content, descricao, ou snippet).")
-
-    for campo in ("titulo", "categoria", "url", "data"):
-        if campo not in df.columns:
-            df[campo] = ""
-
+    df["texto"] = df["texto"].astype(str)
     df["id"] = range(len(df))
-    df = df[["id", "titulo", "data", "categoria", "url", "texto"]].copy()
+
     return df
 
+# ─────────────────────────────────────────────────────────────
+# 2. CLEAN
+# ─────────────────────────────────────────────────────────────
 
-# ---------------------------------------------------------------------------
-# 2. PRÉ-PROCESSAMENTO DE TEXTO
-# ---------------------------------------------------------------------------
+def limpar_texto(t):
+    t = re.sub(r"<[^>]+>", " ", t)
+    t = re.sub(r"https?://\S+", " ", t)
+    t = re.sub(r"\s+", " ", t).strip()
+    return t[:MAX_TEXT_LEN]
 
-def limpar_texto(texto: str) -> str:
-    """Remove artefactos HTML residuais, URLs e normaliza espaços."""
-    if not isinstance(texto, str):
-        return ""
-    texto = re.sub(r"<[^>]+>", " ", texto)             # tags HTML
-    texto = re.sub(r"https?://\S+", " ", texto)         # URLs
-    texto = re.sub(r"[^\w\s\-áéíóúâêîôûãõàèìòùçÁÉÍÓÚÂÊÎÔÛÃÕÀÈÌÒÙÇ]", " ", texto)
-    texto = re.sub(r"\s+", " ", texto).strip()
-    return texto[:MAX_TEXT_LEN]
-
-
-def preparar_corpus(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
-    """
-    Filtra registos inválidos e devolve DataFrame limpo + lista de textos.
-    """
+def preparar(df):
     df = df.copy()
     df["texto_limpo"] = df["texto"].apply(limpar_texto)
 
-    # Descarta textos demasiado curtos para produzir embeddings úteis
-    mascara = df["texto_limpo"].str.len() >= MIN_TEXT_LEN
-    n_descartados = (~mascara).sum()
-    if n_descartados:
-        log.warning("  %d registos descartados (texto < %d chars)", n_descartados, MIN_TEXT_LEN)
+    df = df[df["texto_limpo"].str.len() >= MIN_TEXT_LEN]
+    df = df.reset_index(drop=True)
 
-    df = df[mascara].reset_index(drop=True)
-    df["id"] = range(len(df))
+    log.info(f"Corpus: {len(df)} docs")
+    return df
 
-    if df.empty:
-        raise ValueError("Corpus vazio após filtragem. Verifique o ficheiro de entrada.")
+# ─────────────────────────────────────────────────────────────
+# 3. EMBEDDINGS
+# ─────────────────────────────────────────────────────────────
 
-    log.info("  Corpus final: %d documentos", len(df))
-    return df, df["texto_limpo"].tolist()
+def gerar_embeddings(textos, modelo):
+    from sentence_transformers import SentenceTransformer
 
+    model = SentenceTransformer(modelo)
 
-# ---------------------------------------------------------------------------
-# 3. EMBEDDINGS COM SENTENCE-TRANSFORMERS
-# ---------------------------------------------------------------------------
-
-def gerar_embeddings(textos: list[str], modelo_nome: str = DEFAULT_MODEL) -> np.ndarray:
-    """
-    Gera embeddings semânticos com sentence-transformers.
-
-    Na primeira execução descarrega o modelo (~120 MB para MiniLM).
-    Execuções seguintes usam a cache local em ~/.cache/huggingface/
-    """
-    try:
-        from sentence_transformers import SentenceTransformer
-    except ImportError:
-        log.error("sentence-transformers não instalado.")
-        log.error("  Execute: pip install sentence-transformers")
-        sys.exit(1)
-
-    log.info("  Modelo: %s", modelo_nome)
-    log.info("  (primeira execução descarrega o modelo — aguarde)")
-
-    modelo = SentenceTransformer(modelo_nome)
-    embeddings = modelo.encode(
+    emb = model.encode(
         textos,
-        batch_size=32,
         show_progress_bar=True,
         convert_to_numpy=True,
-        normalize_embeddings=True,   # cosine similarity equivale a dot product
+        normalize_embeddings=True
     )
-    log.info("  Embeddings: shape=%s  dtype=%s", embeddings.shape, embeddings.dtype)
-    return embeddings
 
+    return emb
 
-# ---------------------------------------------------------------------------
-# 4. REDUÇÃO DE DIMENSIONALIDADE
-# ---------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────
+# 4. UMAP
+# ─────────────────────────────────────────────────────────────
 
-def reduzir_pca(embeddings: np.ndarray, n_components: int = PCA_COMPONENTS) -> np.ndarray:
-    """
-    PCA para reduzir dimensões antes do KMeans.
+def reduzir_umap(embeddings):
+    reducer = umap.UMAP(
+        n_neighbors=15,
+        n_components=5,
+        min_dist=0.0,
+        metric="cosine",
+        random_state=42
+    )
 
-    KMeans sofre de "curse of dimensionality" em espaços de 384+ dims.
-    PCA→50 dims retém >90% da variância na maioria dos corpora.
-    """
-    n_components = min(n_components, embeddings.shape[0] - 1, embeddings.shape[1])
-    pca = PCA(n_components=n_components, random_state=42)
-    reduzido = pca.fit_transform(embeddings)
-    variancia = pca.explained_variance_ratio_.sum()
-    log.info("  PCA: %d → %d dims  (variância retida: %.1f%%)",
-             embeddings.shape[1], n_components, variancia * 100)
-    return reduzido
+    return reducer.fit_transform(embeddings)
 
+# ─────────────────────────────────────────────────────────────
+# 5. HDBSCAN
+# ─────────────────────────────────────────────────────────────
 
-def reduzir_umap(embeddings: np.ndarray, n_components: int = 2) -> np.ndarray | None:
-    """
-    UMAP para redução a 2D (apenas visualização).
-    Retorna None se umap-learn não estiver instalado.
-    """
-    try:
-        import umap  # noqa: F401
-        reducer = umap.UMAP(n_components=n_components, random_state=42, verbose=False)
-        coords = reducer.fit_transform(embeddings)
-        log.info("  UMAP 2D calculado para visualização")
-        return coords
-    except ImportError:
-        log.info("  umap-learn não instalado — visualização 2D ignorada")
-        return None
+def clusterizar(embeddings):
+    clusterer = hdbscan.HDBSCAN(
+        min_cluster_size=10,
+        metric="euclidean",
+        cluster_selection_method="eom"
+    )
 
+    labels = clusterer.fit_predict(embeddings)
 
-# ---------------------------------------------------------------------------
-# 5. DETERMINAÇÃO DO K ÓTIMO
-# ---------------------------------------------------------------------------
+    log.info(f"Clusters encontrados: {len(set(labels)) - (1 if -1 in labels else 0)}")
+    log.info(f"Outliers: {(labels == -1).sum()}")
 
-def escolher_k(embeddings: np.ndarray, k_min: int = K_MIN, k_max: int = K_MAX) -> tuple[int, dict]:
-    """
-    Avalia KMeans para k em [k_min, k_max] e devolve o k com maior
-    Silhouette Score — métrica que não precisa de rótulos externos.
+    return labels
 
-    Também devolve o dicionário de scores para diagnóstico.
-    """
-    n_amostras = embeddings.shape[0]
-    k_max = min(k_max, n_amostras - 1)
-    k_min = min(k_min, k_max)
+# ─────────────────────────────────────────────────────────────
+# 6. c-TF-IDF
+# ─────────────────────────────────────────────────────────────
 
-    scores: dict[int, float] = {}
-    log.info("  Avaliando k de %d a %d ...", k_min, k_max)
+def c_tf_idf(docs_per_cluster):
+    vectorizer = CountVectorizer(
+        stop_words=list(STOPWORDS_PT),
+        ngram_range=(1,2)
+    )
 
-    for k in range(k_min, k_max + 1):
-        km = KMeans(n_clusters=k, random_state=42, n_init="auto")
-        labels = km.fit_predict(embeddings)
-        score = silhouette_score(embeddings, labels, sample_size=min(1000, n_amostras))
-        scores[k] = round(float(score), 4)
-        log.info("    k=%d  silhouette=%.4f", k, score)
+    X = vectorizer.fit_transform(docs_per_cluster)
 
-    k_otimo = max(scores, key=scores.__getitem__)
-    log.info("  → k ótimo: %d  (silhouette=%.4f)", k_otimo, scores[k_otimo])
-    return k_otimo, scores
+    # frequência por cluster
+    tf = X.toarray()
 
+    # normalização (c-TF-IDF)
+    tf = normalize(tf, norm="l1", axis=1)
 
-# ---------------------------------------------------------------------------
-# 6. CLUSTERING KMEANS
-# ---------------------------------------------------------------------------
+    idf = np.log((1 + len(docs_per_cluster)) / (1 + (tf > 0).sum(axis=0))) + 1
 
-def aplicar_kmeans(embeddings: np.ndarray, k: int) -> tuple[KMeans, np.ndarray]:
-    """Aplica KMeans com k fixo e devolve modelo + labels."""
-    km = KMeans(n_clusters=k, random_state=42, n_init="auto", max_iter=500)
-    labels = km.fit_predict(embeddings)
-    log.info("  KMeans k=%d  inertia=%.2f", k, km.inertia_)
-    return km, labels
+    ctfidf = tf * idf
 
+    return ctfidf, vectorizer
 
-# ---------------------------------------------------------------------------
-# 7. INTERPRETAÇÃO DE TEMAS POR TF-IDF
-# ---------------------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────
+# 7. INTERPRETAÇÃO
+# ─────────────────────────────────────────────────────────────
 
-def interpretar_clusters(
-    df: pd.DataFrame,
-    labels: np.ndarray,
-    top_n: int = TOP_TERMS,
-) -> dict[int, dict]:
-    """
-    Para cada cluster:
-      - Concatena todos os textos do cluster
-      - Aplica TF-IDF para extrair os termos mais representativos
-      - Recolhe exemplos de títulos (até 3)
-      - Gera um rótulo automático com os 3 termos principais
-
-    Retorna dicionário cluster_id → metadados.
-    """
+def interpretar(df, labels):
     df = df.copy()
     df["cluster"] = labels
 
-    # TF-IDF sobre o corpus completo para penalizar termos globalmente frequentes
-    vectorizer = TfidfVectorizer(
-        min_df=1,
-        max_df=0.95,
-        ngram_range=(1, 2),       # uni e bigramas
-        stop_words=list(STOPWORDS_PT),
-        token_pattern=r"(?u)\b[a-záéíóúâêîôûãõàèìòùçA-ZÁÉÍÓÚÂÊÎÔÛÃÕÀÈÌÒÙÇ]{3,}\b",
-    )
-    vectorizer.fit(df["texto_limpo"].tolist())
+    clusters = {}
+
+    docs_por_cluster = []
+    ids = []
+
+    for cid in sorted(set(labels)):
+        if cid == -1:
+            continue
+
+        sub = df[df["cluster"] == cid]
+
+        docs_por_cluster.append(" ".join(sub["texto_limpo"]))
+        ids.append(cid)
+
+    ctfidf, vectorizer = c_tf_idf(docs_por_cluster)
     termos = vectorizer.get_feature_names_out()
 
-    clusters: dict[int, dict] = {}
+    for i, cid in enumerate(ids):
+        scores = ctfidf[i]
+        top_idx = scores.argsort()[::-1][:TOP_TERMS]
 
-    for cluster_id in sorted(df["cluster"].unique()):
-        sub = df[df["cluster"] == cluster_id]
-        corpus_cluster = " ".join(sub["texto_limpo"].tolist())
+        top_terms = [termos[j] for j in top_idx]
 
-        # Score TF-IDF do cluster agregado
-        vec = vectorizer.transform([corpus_cluster]).toarray()[0]
-        top_idx = vec.argsort()[::-1][:top_n]
-        top_termos = [termos[i] for i in top_idx if vec[i] > 0]
-
-        # Exemplos de títulos
-        titulos = (
-            sub["titulo"]
-            .replace("", pd.NA)
-            .dropna()
-            .head(3)
-            .tolist()
-        )
-
-        # Rótulo automático: 3 primeiros termos em maiúsculas
-        rotulo = " · ".join(t.title() for t in top_termos[:3]) or f"Cluster {cluster_id}"
-
-        clusters[int(cluster_id)] = {
-            "rotulo":         rotulo,
-            "n_documentos":   int(len(sub)),
-            "top_termos":     top_termos,
-            "exemplos_titulos": titulos,
-            "ids_documentos": sub["id"].tolist(),
+        clusters[int(cid)] = {
+            "top_termos": top_terms,
+            "n_documentos": int((labels == cid).sum()),
+            "rotulo": " · ".join(top_terms[:3])
         }
 
     return clusters
 
+# ─────────────────────────────────────────────────────────────
+# 8. EXPORT
+# ─────────────────────────────────────────────────────────────
 
-# ---------------------------------------------------------------------------
-# 8. EXPORTAÇÃO DE RESULTADOS
-# ---------------------------------------------------------------------------
+def exportar(df, labels, clusters, coords_2d, output):
+    from datetime import datetime
 
-def exportar_resultados(
-    df: pd.DataFrame,
-    labels: np.ndarray,
-    clusters: dict,
-    silhouette_scores: dict,
-    k_otimo: int,
-    coords_2d: np.ndarray | None,
-    caminho_saida: str,
-) -> None:
-    """Guarda o JSON estruturado com todos os resultados."""
-    from datetime import datetime, timezone
+    df_out = df.copy()
+    df_out["cluster_id"] = labels
+    df_out["cluster_rotulo"] = [
+        clusters.get(int(l), {}).get("rotulo", "Outlier")
+        if l != -1 else "Outlier"
+        for l in labels
+    ]
 
-    # Documentos com cluster atribuído
-    df_out = df[["id", "titulo", "data", "categoria", "url"]].copy()
-    df_out["cluster_id"]    = labels.tolist()
-    df_out["cluster_rotulo"] = [clusters[int(l)]["rotulo"] for l in labels]
+    # coordenadas UMAP (IMPORTANTE pro teu mapa)
     if coords_2d is not None:
-        df_out["umap_x"] = coords_2d[:, 0].round(4).tolist()
-        df_out["umap_y"] = coords_2d[:, 1].round(4).tolist()
+        df_out["umap_x"] = coords_2d[:, 0]
+        df_out["umap_y"] = coords_2d[:, 1]
 
-    output = {
+    result = {
         "metadata": {
-            "total_documentos": len(df),
-            "k_clusters":       k_otimo,
-            "silhouette_scores": {str(k): v for k, v in silhouette_scores.items()},
-            "silhouette_otimo": silhouette_scores[k_otimo],
-            "gerado_em":        datetime.now(timezone.utc).isoformat(),
+            "total_documentos": len(df_out),
+            "k_clusters": len(clusters),
+            "gerado_em": datetime.utcnow().isoformat()
         },
         "clusters": clusters,
-        "documentos": df_out.to_dict(orient="records"),
+        "documentos": df_out[[
+            "id", "titulo", "data", "categoria", "url",
+            "cluster_id", "cluster_rotulo",
+            "umap_x", "umap_y"
+        ]].to_dict("records")
     }
 
-    Path(caminho_saida).write_text(
-        json.dumps(output, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-    log.info("  Resultados guardados: %s", caminho_saida)
-
-
-# ---------------------------------------------------------------------------
-# 9. RELATÓRIO LEGÍVEL NO TERMINAL
-# ---------------------------------------------------------------------------
-
-SEPARADOR = "─" * 60
-
-def imprimir_relatorio(clusters: dict, silhouette_scores: dict, k_otimo: int) -> None:
-    """Imprime relatório formatado no terminal."""
-    print(f"\n{'═' * 60}")
-    print(f"  ANÁLISE TEMÁTICA — {k_otimo} CLUSTERS")
-    print(f"  Silhouette Score: {silhouette_scores[k_otimo]:.4f}  "
-          f"(1.0 = clusters perfeitos)")
-    print(f"{'═' * 60}")
-
-    for cid, info in clusters.items():
-        print(f"\n  CLUSTER {cid}  ·  {info['n_documentos']} documentos")
-        print(f"  Tema: {info['rotulo']}")
-        print(f"  {SEPARADOR}")
-        print(f"  Termos:   {', '.join(info['top_termos'][:8])}")
-        if info["exemplos_titulos"]:
-            print("  Exemplos:")
-            for t in info["exemplos_titulos"]:
-                print(f"    → {t}")
-
-    print(f"\n{'═' * 60}\n")
-
-
-# ---------------------------------------------------------------------------
-# PIPELINE PRINCIPAL
-# ---------------------------------------------------------------------------
-
-def run(
-    caminho_input: str,
-    caminho_output: str,
-    k_manual: int | None = None,
-    modelo: str = DEFAULT_MODEL,
-) -> dict:
-    """
-    Executa o pipeline NLP completo.
-
-    Parâmetros
-    ----------
-    caminho_input  : ficheiro JSON do arquivo_pt_pipeline.py ou eventos_sns.json
-    caminho_output : caminho para o JSON de resultados
-    k_manual       : força um número de clusters (None = automático)
-    modelo         : nome do modelo sentence-transformers
-
-    Retorna
-    -------
-    Dicionário com clusters interpretados
-    """
-    log.info("━━━━  PASSO 1/6 · Carregamento  ━━━━")
-    df_raw = carregar_textos(caminho_input)
-    log.info("  Registos carregados: %d", len(df_raw))
-
-    log.info("━━━━  PASSO 2/6 · Pré-processamento  ━━━━")
-    df, textos = preparar_corpus(df_raw)
-
-    log.info("━━━━  PASSO 3/6 · Embeddings  ━━━━")
-    embeddings = gerar_embeddings(textos, modelo_nome=modelo)
-
-    log.info("━━━━  PASSO 4/6 · Redução dimensional  ━━━━")
-    emb_pca  = reduzir_pca(embeddings)
-    emb_umap = reduzir_umap(embeddings)   # None se umap-learn não instalado
-
-    log.info("━━━━  PASSO 5/6 · Clustering  ━━━━")
-    if k_manual:
-        k_otimo = k_manual
-        # Calcula silhouette só para o k escolhido
-        km_temp = KMeans(n_clusters=k_otimo, random_state=42, n_init="auto")
-        lbl_temp = km_temp.fit_predict(emb_pca)
-        score = silhouette_score(emb_pca, lbl_temp)
-        silhouette_scores = {k_otimo: round(float(score), 4)}
-        log.info("  k manual=%d  silhouette=%.4f", k_otimo, score)
-    else:
-        k_otimo, silhouette_scores = escolher_k(emb_pca)
-
-    _, labels = aplicar_kmeans(emb_pca, k_otimo)
-
-    log.info("━━━━  PASSO 6/6 · Interpretação de temas  ━━━━")
-    clusters = interpretar_clusters(df, labels)
-
-    exportar_resultados(
-        df, labels, clusters, silhouette_scores,
-        k_otimo, emb_umap, caminho_output,
+    Path(output).write_text(
+        json.dumps(result, indent=2, ensure_ascii=False),
+        encoding="utf-8"
     )
 
-    imprimir_relatorio(clusters, silhouette_scores, k_otimo)
-    return clusters
+# ─────────────────────────────────────────────────────────────
+# MAIN
+# ─────────────────────────────────────────────────────────────
 
+def run(input_path, output_path, modelo):
+    log.info("Carregando dados...")
+    df = carregar_textos(input_path)
 
-# ---------------------------------------------------------------------------
-# ENTRADA DE EXECUÇÃO
-# ---------------------------------------------------------------------------
+    log.info("Limpando...")
+    df = preparar(df)
 
-def _parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(
-        description="Pipeline NLP: embeddings + clustering para textos do SNS"
-    )
-    p.add_argument(
-        "--input", "-i",
-        default="arquivo_sns_data.json",
-        help="JSON de entrada (arquivo_pt_pipeline.py ou eventos_sns.json)",
-    )
-    p.add_argument(
-        "--output", "-o",
-        default="nlp_resultados.json",
-        help="Ficheiro JSON de resultados",
-    )
-    p.add_argument(
-        "--clusters", "-k",
-        type=int,
-        default=None,
-        help="Número de clusters (omitir = automático por Silhouette)",
-    )
-    p.add_argument(
-        "--modelo", "-m",
-        default=DEFAULT_MODEL,
-        help=f"Modelo sentence-transformers (default: {DEFAULT_MODEL})",
-    )
-    return p.parse_args()
+    log.info("Embeddings...")
+    emb = gerar_embeddings(df["texto_limpo"].tolist(), modelo)
 
+    log.info("UMAP...")
+    emb_umap = reduzir_umap(emb)
+
+    log.info("Clustering...")
+    labels = clusterizar(emb_umap)
+
+    log.info("Interpretando...")
+
+    clusters = interpretar(df, labels)
+    coords_2d = reduzir_umap(emb)[:, :2]  # garante 2D
+    exportar(df, labels, clusters, coords_2d, output_path)
+
+# ─────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    args = _parse_args()
+    run("arquivo_sns_data.json", "nlp_resultados.json", DEFAULT_MODEL)
 
-    if not Path(args.input).exists():
-        log.error("Ficheiro não encontrado: %s", args.input)
-        log.error("Gere o ficheiro com: python arquivo_pt_pipeline.py")
-        sys.exit(1)
+if __name__ == "__main_":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--input", required=True)
+    parser.add_argument("--output", default="nlp_resultados.json")
+    parser.add_argument("--modelo", default=DEFAULT_MODEL)
 
-    run(
-        caminho_input=args.input,
-        caminho_output=args.output,
-        k_manual=args.clusters,
-        modelo=args.modelo,
-    )
+    args = parser.parse_args()
+
+    run(args.input, args.output, args.modelo)
